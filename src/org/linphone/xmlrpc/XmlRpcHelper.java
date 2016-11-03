@@ -820,4 +820,32 @@ public class XmlRpcHelper {
 		}
 		return false;
 	}
+
+	public void getSipServerAdressForCountryCode(final XmlRpcListener listener, String username, String password, String countryCode) {
+		if (mXmlRpcClient != null) {
+			try {
+				if (username == null)
+					username = "";
+				if (password == null)
+					password = "";
+				String[] args = {username, password, countryCode};
+				Object object = mXmlRpcClient.call("get_sip_server_for_country_code", username, password, countryCode);
+				String result = (String)object;
+				Log.d("getSipServerAdressForCountryCode: " + result+" vs countrycode = "+countryCode);
+				if (result.startsWith("ERROR_")) {
+					Log.e(result);
+					listener.onError(result);
+				}
+				listener.onSipServerAdressReceived(result);
+
+			} catch (XMLRPCException e) {
+				Log.e(e);
+				listener.onError(e.toString());
+			}
+		} else {
+			Log.e(CLIENT_ERROR_INVALID_SERVER_URL);
+			listener.onError(CLIENT_ERROR_INVALID_SERVER_URL);
+		}
+		return ;
+	}
 }
