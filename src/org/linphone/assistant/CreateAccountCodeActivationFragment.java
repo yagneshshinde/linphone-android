@@ -36,6 +36,7 @@ import android.view.View.OnClickListener;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -45,7 +46,8 @@ public class CreateAccountCodeActivationFragment extends Fragment implements Lin
 	private EditText code;
 	private boolean recoverAccount = false, linkAccount = false;
 	private int code_length;
-	private Button checkAccount, back;
+	private ImageView back;
+	private Button checkAccount;
 	private LinphoneAccountCreator accountCreator;
 
 	@Override
@@ -66,8 +68,7 @@ public class CreateAccountCodeActivationFragment extends Fragment implements Lin
 		accountCreator.setUsername(username);
 		accountCreator.setPhoneNumber(phone, dialcode);
 
-
-        back = (Button) view.findViewById(R.id.cancel);
+		back = (ImageView) view.findViewById(R.id.back);
 		if (back != null)
 			back.setVisibility(Button.INVISIBLE);
 
@@ -141,6 +142,9 @@ public class CreateAccountCodeActivationFragment extends Fragment implements Lin
 
 	@Override
 	public void onAccountCreatorAccountActivated(LinphoneAccountCreator accountCreator, LinphoneAccountCreator.Status status) {
+		if (AssistantActivity.instance() == null) {
+			return;
+		}
 		if (status.equals(Status.AccountActivated)) {
 			checkAccount.setEnabled(true);
 			if (accountCreator.getUsername() != null) {
@@ -160,8 +164,9 @@ public class CreateAccountCodeActivationFragment extends Fragment implements Lin
 			}
 		} else if (status.equals(LinphoneAccountCreator.Status.Failed)) {
 			Toast.makeText(getActivity(), getString(R.string.wizard_server_unavailable), Toast.LENGTH_LONG).show();
-		}else {
+		} else {
 			Toast.makeText(getActivity(), getString(R.string.assistant_error_confirmation_code), Toast.LENGTH_LONG).show();
+			AssistantActivity.instance().displayAssistantLinphoneLogin(phone, dialcode);
 		}
 	}
 
@@ -172,6 +177,9 @@ public class CreateAccountCodeActivationFragment extends Fragment implements Lin
 
 	@Override
 	public void onAccountCreatorPhoneNumberLinkActivated(LinphoneAccountCreator accountCreator, LinphoneAccountCreator.Status status) {
+		if (AssistantActivity.instance() == null) {
+			return;
+		}
 		if(status.equals(LinphoneAccountCreator.Status.Ok)){
 			LinphonePreferences.instance().setLinkPopupTime("");
 			AssistantActivity.instance().hideKeyboard();

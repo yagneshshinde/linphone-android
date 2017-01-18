@@ -30,7 +30,6 @@ import org.linphone.mediastream.Log;
 
 import android.app.Dialog;
 import android.app.Fragment;
-import android.graphics.Bitmap;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.view.ContextMenu;
@@ -228,7 +227,10 @@ public class ChatListFragment extends Fragment implements OnClickListener, OnIte
 
 	@Override
 	public void onContactsUpdated() {
-		hideAndDisplayMessageIfNoChat();
+		ChatListAdapter adapter = (ChatListAdapter)chatList.getAdapter();
+		if (adapter != null) {
+			adapter.notifyDataSetChanged();
+		}
 	}
 
 	@Override
@@ -422,14 +424,9 @@ public class ChatListFragment extends Fragment implements OnClickListener, OnIte
 
 
 			if (contact != null) {
-				Bitmap photo = contact.getPhoto();
-				if (photo != null) {
-					holder.contactPicture.setImageBitmap(photo);
-				} else {
-					LinphoneUtils.setImagePictureFromUri(getActivity(), holder.contactPicture, contact.getPhotoUri(), contact.getThumbnailUri());
-				}
+				LinphoneUtils.setThumbnailPictureFromUri(getActivity(), holder.contactPicture, contact.getThumbnailUri());
 			} else {
-				holder.contactPicture.setImageResource(R.drawable.avatar);
+				holder.contactPicture.setImageBitmap(ContactsManager.getInstance().getDefaultAvatarBitmap());
 			}
 
 			if (unreadMessagesCount > 0) {

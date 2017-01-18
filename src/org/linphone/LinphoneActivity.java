@@ -99,7 +99,7 @@ import android.widget.Toast;
 /**
  * @author Sylvain Berfini
  */
-public class LinphoneActivity extends Activity implements OnClickListener, ContactPicked, ActivityCompat.OnRequestPermissionsResultCallback {
+public class LinphoneActivity extends LinphoneGenericActivity implements OnClickListener, ContactPicked, ActivityCompat.OnRequestPermissionsResultCallback {
 	public static final String PREF_FIRST_LAUNCH = "pref_first_launch";
 	private static final int SETTINGS_ACTIVITY = 123;
 	private static final int CALL_ACTIVITY = 19;
@@ -156,12 +156,6 @@ public class LinphoneActivity extends Activity implements OnClickListener, Conta
         if (getResources().getBoolean(R.bool.orientation_portrait_only)) {
         	setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         }
-
-		if (!LinphoneManager.isInstanciated()) {
-			finish();
-			startActivity(getIntent().setClass(this, LinphoneLauncherActivity.class));
-			return;
-		}
 
 		boolean useFirstLoginActivity = getResources().getBoolean(R.bool.display_account_assistant_at_first_start);
 		if (LinphonePreferences.instance().isProvisioningLoginViewEnabled()) {
@@ -263,7 +257,7 @@ public class LinphoneActivity extends Activity implements OnClickListener, Conta
 			}
 		};
 
-		int missedCalls = LinphoneManager.getLc().getMissedCallsCount();
+		int missedCalls = (LinphoneManager.isInstanciated()) ? LinphoneManager.getLc().getMissedCallsCount() : 0;
 		displayMissedCalls(missedCalls);
 
 		int rotation = getWindowManager().getDefaultDisplay().getRotation();
@@ -282,7 +276,9 @@ public class LinphoneActivity extends Activity implements OnClickListener, Conta
 			break;
 		}
 
-		LinphoneManager.getLc().setDeviceRotation(rotation);
+		if (LinphoneManager.isInstanciated()) {
+			LinphoneManager.getLc().setDeviceRotation(rotation);
+		}
 		mAlwaysChangingPhoneAngle = rotation;
 	}
 
@@ -1077,6 +1073,7 @@ public class LinphoneActivity extends Activity implements OnClickListener, Conta
 	public void quit() {
 		finish();
 		stopService(new Intent(Intent.ACTION_MAIN).setClass(this, LinphoneService.class));
+		android.os.Process.killProcess(android.os.Process.myPid());
 	}
 
 	@Override
@@ -1099,8 +1096,8 @@ public class LinphoneActivity extends Activity implements OnClickListener, Conta
 			}
 		} else if (resultCode == Activity.RESULT_FIRST_USER && requestCode == CALL_ACTIVITY) {
 			getIntent().putExtra("PreviousActivity", CALL_ACTIVITY);
-			callTransfer = data == null ? false : data.getBooleanExtra("Transfer", false);
-			boolean chat = data == null ? false : data.getBooleanExtra("chat", false);
+			callTransfer = data != null && data.getBooleanExtra("Transfer", false);
+			boolean chat = data != null && data.getBooleanExtra("chat", false);
 			if(chat){
 				pendingFragmentTransaction = FragmentsAvailable.CHAT_LIST;
 			}
@@ -1191,16 +1188,14 @@ public class LinphoneActivity extends Activity implements OnClickListener, Conta
 		Log.i("[Permission] Camera permission is " + (camera == PackageManager.PERMISSION_GRANTED ? "granted" : "denied"));
 
 		if (readExternalStorage != PackageManager.PERMISSION_GRANTED) {
-			if (LinphonePreferences.instance().firstTimeAskingForPermission(Manifest.permission.READ_EXTERNAL_STORAGE) || ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.READ_EXTERNAL_STORAGE)) {
-				Log.i("[Permission] Asking for read external storage");
-				permissionsList.add(Manifest.permission.READ_EXTERNAL_STORAGE);
-			}
+			ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.READ_EXTERNAL_STORAGE);
+			Log.i("[Permission] Asking for read external storage");
+			permissionsList.add(Manifest.permission.READ_EXTERNAL_STORAGE);
 		}
 		if (camera != PackageManager.PERMISSION_GRANTED) {
-			if (LinphonePreferences.instance().firstTimeAskingForPermission(Manifest.permission.CAMERA) || ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.CAMERA)) {
-				Log.i("[Permission] Asking for camera");
-				permissionsList.add(Manifest.permission.CAMERA);
-			}
+			ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.CAMERA);
+			Log.i("[Permission] Asking for camera");
+			permissionsList.add(Manifest.permission.CAMERA);
 		}
 		if (permissionsList.size() > 0) {
 			String[] permissions = new String[permissionsList.size()];
@@ -1218,19 +1213,21 @@ public class LinphoneActivity extends Activity implements OnClickListener, Conta
 		Log.i("[Permission] " + permission + " is " + (permissionGranted == PackageManager.PERMISSION_GRANTED ? "granted" : "denied"));
 
 		if (permissionGranted != PackageManager.PERMISSION_GRANTED) {
-			if (LinphonePreferences.instance().firstTimeAskingForPermission(permission) || ActivityCompat.shouldShowRequestPermissionRationale(this, permission)) {
-				Log.i("[Permission] Asking for " + permission);
-				ActivityCompat.requestPermissions(this, new String[] { permission }, result);
-			}
+			ActivityCompat.shouldShowRequestPermissionRationale(this, permission);
+			Log.i("[Permission] Asking for " + permission);
+			ActivityCompat.requestPermissions(this, new String[] { permission }, result);
 		}
 	}
 
 	@Override
 	public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+		if (permissions.length <= 0)
+			return;
+
 		int readContactsI = -1;
 		for (int i = 0; i < permissions.length; i++) {
 			Log.i("[Permission] " + permissions[i] + " is " + (grantResults[i] == PackageManager.PERMISSION_GRANTED ? "granted" : "denied"));
-			if (permissions[i] == Manifest.permission.READ_CONTACTS)
+			if (permissions[i].compareTo(Manifest.permission.READ_CONTACTS) == 0)
 				readContactsI = i;
 		}
 
@@ -1250,14 +1247,6 @@ public class LinphoneActivity extends Activity implements OnClickListener, Conta
 				}
 				break;
 			case PERMISSIONS_READ_EXTERNAL_STORAGE_DEVICE_RINGTONE:
-				if (readContactsI >= 0 && grantResults[readContactsI] == PackageManager.PERMISSION_GRANTED) {
-					ContactsManager.getInstance().enableContactsAccess();
-				}
-				if (!fetchedContactsOnce) {
-					ContactsManager.getInstance().enableContactsAccess();
-					ContactsManager.getInstance().fetchContactsAsync();
-					fetchedContactsOnce = true;
-				}
 				if (permissions[0].compareTo(Manifest.permission.READ_EXTERNAL_STORAGE) != 0)
 					break;
 				boolean enableRingtone = (grantResults[0] == PackageManager.PERMISSION_GRANTED);
@@ -1268,6 +1257,14 @@ public class LinphoneActivity extends Activity implements OnClickListener, Conta
 				if (grantResults[0] == PackageManager.PERMISSION_GRANTED)
 					((SettingsFragment) fragment).startEchoTester();
 				break;
+		}
+		if (readContactsI >= 0 && grantResults[readContactsI] == PackageManager.PERMISSION_GRANTED) {
+			ContactsManager.getInstance().enableContactsAccess();
+			if (!fetchedContactsOnce) {
+				ContactsManager.getInstance().enableContactsAccess();
+				ContactsManager.getInstance().fetchContactsAsync();
+				fetchedContactsOnce = true;
+			}
 		}
 	}
 
@@ -1611,7 +1608,7 @@ public class LinphoneActivity extends Activity implements OnClickListener, Conta
 			accountsList.setOnItemClickListener(new AdapterView.OnItemClickListener() {
 				@Override
 				public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
-					if(view != null) {
+					if(view != null && view.getTag() != null) {
 						int position = Integer.parseInt(view.getTag().toString());
 						LinphoneActivity.instance().displayAccountSettings(position);
 					}

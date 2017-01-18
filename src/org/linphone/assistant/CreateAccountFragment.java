@@ -225,13 +225,13 @@ public class CreateAccountFragment extends Fragment implements CompoundButton.On
 			assisstantTitle.setText(getResources().getString(R.string.link_account));
 		}
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-				accountCreator.setLanguage(Locale.getDefault().toLanguageTag());
+			accountCreator.setLanguage(Locale.getDefault().toLanguageTag());
 		}
 
 		addUsernameHandler(usernameEdit, null);
 
-    	createAccount.setEnabled(true);
-    	createAccount.setOnClickListener(this);
+		createAccount.setEnabled(true);
+		createAccount.setOnClickListener(this);
 
 		return view;
 	}
@@ -296,59 +296,51 @@ public class CreateAccountFragment extends Fragment implements CompoundButton.On
 
 	@Override
 	public void onClick(View v) {
-		switch (v.getId()) {
-			case R.id.select_country: {
-				AssistantActivity.instance().displayCountryChooser();
-				break;
+		int id = v.getId();
+		if(id == R.id.select_country){
+			AssistantActivity.instance().displayCountryChooser();
+		}
+		else if (id == R.id.assistant_skip){
+			if (getArguments().getBoolean("LinkFromPref")) {
+				startActivity(new Intent().setClass(AssistantActivity.instance(), LinphoneActivity.class));
+				AssistantActivity.instance().finish();
+			} else {
+				AssistantActivity.instance().success();
 			}
-
-			case R.id.assistant_skip: {
-				if (getArguments().getBoolean("LinkFromPref")) {
-					startActivity(new Intent().setClass(AssistantActivity.instance(), LinphoneActivity.class));
-					AssistantActivity.instance().finish();
-				} else {
-					AssistantActivity.instance().success();
-				}
-				break;
+		}
+		else if(id == R.id.info_phone_number){
+			if (linkAccount) {
+				new AlertDialog.Builder(getActivity())
+						.setTitle(getString(R.string.phone_number_info_title))
+						.setMessage(getString(R.string.phone_number_link_info_content) + "\n"
+								+ getString(R.string.phone_number_link_info_content_already_account))
+						.show();
+			} else {
+				new AlertDialog.Builder(getActivity())
+						.setTitle(getString(R.string.phone_number_info_title))
+						.setMessage(getString(R.string.phone_number_info_content))
+						.show();
 			}
-
-			case R.id.info_phone_number: {
-				if (linkAccount) {
-					new AlertDialog.Builder(getActivity())
-							.setTitle(getString(R.string.phone_number_info_title))
-							.setMessage(getString(R.string.phone_number_link_info_content) + "\n"
-									+ getString(R.string.phone_number_link_info_content_already_account))
-							.show();
+		}
+		else if(id == R.id.assistant_create){
+			createAccount.setEnabled(false);
+			if (linkAccount) {
+				addAlias();
+			} else {
+				if (!getResources().getBoolean(R.bool.isTablet) || getUsername().length() > 0) {
+					accountCreator.isAccountUsed();
 				} else {
-					new AlertDialog.Builder(getActivity())
-							.setTitle(getString(R.string.phone_number_info_title))
-							.setMessage(getString(R.string.phone_number_info_content))
-							.show();
+					LinphoneUtils.displayErrorAlert(LinphoneUtils.errorForStatus(Status.UsernameTooShort)
+							, AssistantActivity.instance());
+					createAccount.setEnabled(true);
 				}
-				break;
-			}
-
-			case R.id.assistant_create: {
-				createAccount.setEnabled(false);
-				if (linkAccount) {
-					addAlias();
-				} else {
-					if (!getResources().getBoolean(R.bool.isTablet) || getUsername().length() > 0) {
-						accountCreator.isAccountUsed();
-					} else {
-						LinphoneUtils.displayErrorAlert(LinphoneUtils.errorForStatus(Status.UsernameTooShort)
-								, AssistantActivity.instance());
-						createAccount.setEnabled(true);
-					}
-				}
-				break;
 			}
 		}
 	}
 
 	private boolean isEmailCorrect(String email) {
-    	Pattern emailPattern = Patterns.EMAIL_ADDRESS;
-    	return emailPattern.matcher(email).matches();
+		Pattern emailPattern = Patterns.EMAIL_ADDRESS;
+		return emailPattern.matcher(email).matches();
 	}
 
 	private boolean isPasswordCorrect(String password) {
@@ -634,6 +626,9 @@ public class CreateAccountFragment extends Fragment implements CompoundButton.On
 
 	@Override
 	public void onAccountCreatorAccountLinkedWithPhoneNumber(LinphoneAccountCreator accountCreator, Status status) {
+		if (AssistantActivity.instance() == null) {
+			return;
+		}
 		if (status.equals(Status.Ok)) {
 			AssistantActivity.instance().displayAssistantCodeConfirm(getUsername()
 					, phoneNumberEdit.getText().toString()
@@ -643,6 +638,9 @@ public class CreateAccountFragment extends Fragment implements CompoundButton.On
 
 	@Override
 	public void onAccountCreatorPhoneNumberLinkActivated(LinphoneAccountCreator accountCreator, Status status) {
+		if (AssistantActivity.instance() == null) {
+			return;
+		}
 		if (status.equals(Status.Ok)) {
 			AssistantActivity.instance().displayAssistantCodeConfirm(getUsername()
 					, phoneNumberEdit.getText().toString()
@@ -652,6 +650,9 @@ public class CreateAccountFragment extends Fragment implements CompoundButton.On
 
 	@Override
 	public void onAccountCreatorIsAccountActivated(LinphoneAccountCreator accountCreator, Status status) {
+		if (AssistantActivity.instance() == null) {
+			return;
+		}
 		if (status.equals(Status.AccountNotActivated)) {
 			if (getResources().getBoolean(R.bool.isTablet)
 					|| !getResources().getBoolean(R.bool.use_phone_number_validation)) {
@@ -668,6 +669,9 @@ public class CreateAccountFragment extends Fragment implements CompoundButton.On
 
 	@Override
 	public void onAccountCreatorPhoneAccountRecovered(LinphoneAccountCreator accountCreator, Status status) {
+		if (AssistantActivity.instance() == null) {
+			return;
+		}
 		if (status.equals(Status.Ok)) {
 			AssistantActivity.instance().displayAssistantCodeConfirm(getUsername()
 					, dialCode.getText().toString() , phoneNumberEdit.getText().toString(), false);
@@ -685,6 +689,9 @@ public class CreateAccountFragment extends Fragment implements CompoundButton.On
 
 	@Override
 	public void onAccountCreatorIsPhoneNumberUsed(LinphoneAccountCreator ac, Status status) {
+		if (AssistantActivity.instance() == null) {
+			return;
+		}
 		if (status.equals(Status.PhoneNumberUsedAccount) || status.equals(Status.PhoneNumberUsedAlias)) {
 			if (accountCreator.getPhoneNumber() != null && accountCreator.getUsername() != null
 					&& accountCreator.getPhoneNumber().compareTo(accountCreator.getUsername()) == 0) {

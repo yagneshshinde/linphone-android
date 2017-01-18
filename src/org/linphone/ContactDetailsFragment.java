@@ -107,7 +107,7 @@ public class ContactDetailsFragment extends Fragment implements OnClickListener 
 		if (contact.hasPhoto()) {
 			LinphoneUtils.setImagePictureFromUri(getActivity(), contactPicture, contact.getPhotoUri(), contact.getThumbnailUri());
         } else {
-        	contactPicture.setImageResource(R.drawable.avatar);
+        	contactPicture.setImageBitmap(ContactsManager.getInstance().getDefaultAvatarBitmap());
         }
 		
 		TextView contactName = (TextView) view.findViewById(R.id.contact_name);
@@ -183,7 +183,7 @@ public class ContactDetailsFragment extends Fragment implements OnClickListener 
 			LinphoneActivity.instance().selectMenu(FragmentsAvailable.CONTACT_DETAIL);
 			LinphoneActivity.instance().hideTabBar(false);
 		}
-		contact.refresh();
+		contact.minimalRefresh();
 		displayContact(inflater, view);
 	}
 

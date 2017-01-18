@@ -159,6 +159,7 @@ public class LinphonePreferences {
 
 	private LinphoneAuthInfo getAuthInfo(int n) {
 		LinphoneProxyConfig prxCfg = getProxyConfig(n);
+		if (prxCfg == null) return null;
 		try {
 			LinphoneAddress addr = LinphoneCoreFactory.instance().createLinphoneAddress(prxCfg.getIdentity());
 			LinphoneAuthInfo authInfo = getLc().findAuthInfo(addr.getUserName(), null, addr.getDomain());
@@ -717,6 +718,8 @@ public class LinphonePreferences {
 	}
 
 	public int getDefaultAccountIndex() {
+		if (getLc() == null)
+			return -1;
 		LinphoneProxyConfig defaultPrxCfg = getLc().getDefaultProxyConfig();
 		if (defaultPrxCfg == null)
 			return -1;
@@ -1267,7 +1270,8 @@ public class LinphonePreferences {
 	// End of tunnel settings
 
 	public boolean isProvisioningLoginViewEnabled() {
-		return getConfig().getBool("app", "show_login_view", false);
+
+		return (getConfig() != null) ? getConfig().getBool("app", "show_login_view", false) : false;
 	}
 
 	public void disableProvisioningLoginView() {
@@ -1462,5 +1466,17 @@ public class LinphonePreferences {
 
 	public int getCodeLength(){
 		return getConfig().getInt("app", "activation_code_length", 0);
+	}
+
+	public void disableFriendsStorage() {
+		getConfig().setBool("misc", "store_friends", false);
+	}
+
+	public void enableFriendsStorage() {
+		getConfig().setBool("misc", "store_friends", true);
+	}
+
+	public boolean isFriendsStorageEnabled() {
+		return getConfig().getBool("misc", "store_friends", true);
 	}
 }

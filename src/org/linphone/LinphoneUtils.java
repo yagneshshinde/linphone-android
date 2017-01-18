@@ -42,7 +42,6 @@ import java.util.Locale;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
-import org.linphone.assistant.AssistantActivity;
 import org.linphone.core.DialPlan;
 import org.linphone.core.LinphoneAccountCreator;
 import org.linphone.core.LinphoneAddress;
@@ -58,7 +57,6 @@ import org.linphone.mediastream.video.capture.hwconf.Hacks;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.app.Dialog;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
@@ -229,8 +227,8 @@ public final class LinphoneUtils {
 
 
 	public static void setImagePictureFromUri(Context c, ImageView view, Uri pictureUri, Uri thumbnailUri) {
-		if (pictureUri == null) {
-			view.setImageResource(R.drawable.avatar);
+		if (pictureUri == null && thumbnailUri == null) {
+			view.setImageBitmap(ContactsManager.getInstance().getDefaultAvatarBitmap());
 			return;
 		}
 		if (pictureUri.getScheme().startsWith("http")) {
@@ -252,14 +250,14 @@ public final class LinphoneUtils {
 			if (bm != null) {
 				view.setImageBitmap(bm);
 			} else {
-				view.setImageResource(R.drawable.avatar);
+				view.setImageBitmap(ContactsManager.getInstance().getDefaultAvatarBitmap());
 			}
 		}
 	}
 
 	public static void setThumbnailPictureFromUri(Context c, ImageView view, Uri tUri) {
 		if (tUri == null) {
-			view.setImageResource(R.drawable.avatar);
+			view.setImageBitmap(ContactsManager.getInstance().getDefaultAvatarBitmap());
 			return;
 		}
 		if (tUri.getScheme().startsWith("http")) {
@@ -271,10 +269,11 @@ public final class LinphoneUtils {
 			try {
 				bm = MediaStore.Images.Media.getBitmap(c.getContentResolver(),tUri);
 			} catch (IOException e) {
-				view.setImageURI(tUri);
 			}
-			if(bm != null) {
+			if (bm != null) {
 				view.setImageBitmap(bm);
+			} else {
+				view.setImageBitmap(ContactsManager.getInstance().getDefaultAvatarBitmap());
 			}
 		}
 	}

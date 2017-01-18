@@ -30,7 +30,6 @@ import org.linphone.core.Reason;
 import org.linphone.mediastream.Log;
 
 import android.Manifest;
-import android.app.Activity;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
@@ -46,7 +45,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-public class CallOutgoingActivity extends Activity implements OnClickListener{
+public class CallOutgoingActivity extends LinphoneGenericActivity implements OnClickListener{
 	private static CallOutgoingActivity instance;
 
 	private TextView name, number;
@@ -152,12 +151,12 @@ public class CallOutgoingActivity extends Activity implements OnClickListener{
 					}
 					LinphoneActivity.instance().startIncallActivity(mCall);
 					finish();
+					return;
 				}
 			}
 		}
 		if (mCall == null) {
 			Log.e("Couldn't find outgoing call");
-			LinphoneActivity.instance().goToDialerFragment();
 			finish();
 			return;
 		}
@@ -246,7 +245,10 @@ public class CallOutgoingActivity extends Activity implements OnClickListener{
 
 	private void decline() {
 		LinphoneManager.getLc().terminateCall(mCall);
+		finish();
 	}
+
+
 
 	private void checkAndRequestCallPermissions() {
 		ArrayList<String> permissionsList = new ArrayList<String>();

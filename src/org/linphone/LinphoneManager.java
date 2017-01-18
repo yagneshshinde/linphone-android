@@ -31,7 +31,6 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.sql.Timestamp;
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.Timer;
@@ -41,6 +40,7 @@ import org.linphone.assistant.AssistantActivity;
 import org.linphone.core.CallDirection;
 import org.linphone.core.LinphoneAccountCreator;
 import org.linphone.core.LinphoneAddress;
+import org.linphone.core.LinphoneAuthInfo;
 import org.linphone.core.LinphoneBuffer;
 import org.linphone.core.LinphoneCall;
 import org.linphone.core.LinphoneCall.State;
@@ -56,7 +56,6 @@ import org.linphone.core.LinphoneCore.GlobalState;
 import org.linphone.core.LinphoneCore.LogCollectionUploadState;
 import org.linphone.core.LinphoneCore.RegistrationState;
 import org.linphone.core.LinphoneCore.RemoteProvisioningState;
-import org.linphone.core.LinphoneAuthInfo;
 import org.linphone.core.LinphoneCoreException;
 import org.linphone.core.LinphoneCoreFactory;
 import org.linphone.core.LinphoneCoreListener;
@@ -77,6 +76,7 @@ import org.linphone.mediastream.Version;
 import org.linphone.mediastream.video.capture.hwconf.AndroidCameraConfiguration;
 import org.linphone.mediastream.video.capture.hwconf.AndroidCameraConfiguration.AndroidCamera;
 import org.linphone.mediastream.video.capture.hwconf.Hacks;
+import org.linphone.tools.H264Helper;
 import org.linphone.tools.OpenH264DownloadHelper;
 
 import android.annotation.SuppressLint;
@@ -140,10 +140,13 @@ public class LinphoneManager implements LinphoneCoreListener, LinphoneChatMessag
 	private static boolean sExited;
 	private boolean mAudioFocused;
 	private boolean echoTesterIsRunning;
+	private boolean dozeModeEnabled;
 	private int mLastNetworkType=-1;
 	private ConnectivityManager mConnectivityManager;
 	private BroadcastReceiver mKeepAliveReceiver;
+	private BroadcastReceiver mDozeReceiver;
 	private IntentFilter mKeepAliveIntentFilter;
+	private IntentFilter mDozeIntentFilter;
 	private Handler mHandler = new Handler();
 	private WakeLock mIncallWakeLock;
 	private LinphoneAccountCreator accountCreator;
@@ -188,6 +191,12 @@ public class LinphoneManager implements LinphoneCoreListener, LinphoneChatMessag
 		mConnectivityManager = (ConnectivityManager) c.getSystemService(Context.CONNECTIVITY_SERVICE);
 		mR = c.getResources();
 		mPendingChatFileMessage = new ArrayList<LinphoneChatMessage>();
+
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+			dozeModeEnabled = ((PowerManager)c.getSystemService(Context.POWER_SERVICE)).isDeviceIdleMode();
+		} else {
+			dozeModeEnabled = false;
+		}
 	}
 
 	private static final int LINPHONE_VOLUME_STREAM = STREAM_VOICE_CALL;
@@ -215,7 +224,13 @@ public class LinphoneManager implements LinphoneCoreListener, LinphoneChatMessag
 		mLc.enableSpeaker(speakerOn);
 	}
 
-	public void initOpenH264Helper() {
+	public void initOpenH264DownloadHelper() {
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+			Log.i("Android >= 5.1 we disable the download of OpenH264");
+			getLc().enableDownloadOpenH264(false);
+			return;
+		}
+
 		mCodecDownloader = LinphoneCoreFactory.instance().createOpenH264DownloadHelper();
 		mCodecListener = new OpenH264DownloadHelperListener() {
 			ProgressDialog progress;
@@ -234,14 +249,14 @@ public class LinphoneManager implements LinphoneCoreListener, LinphoneChatMessag
 							progress.setCancelable(false);
 							progress.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
 						} else if (current <= max) {
-							progress.setMessage("Downloading OpenH264");
+							progress.setMessage(getString(R.string.assistant_openh264_downloading));
 							progress.setMax(max);
 							progress.setProgress(current);
 							progress.show();
 						} else {
 							progress.dismiss();
 							progress = null;
-							LinphoneManager.getLc().reloadMsPlugins(null);
+							LinphoneManager.getLc().reloadMsPlugins(LinphoneManager.this.getContext().getApplicationInfo().nativeLibraryDir);
 							if (ohcodec.getUserDataSize() > box && ohcodec.getUserData(box) != null) {
 								((CheckBoxPreference) ohcodec.getUserData(box)).setSummary(mCodecDownloader.getLicenseMessage());
 								((CheckBoxPreference) ohcodec.getUserData(box)).setTitle("OpenH264");
@@ -258,9 +273,9 @@ public class LinphoneManager implements LinphoneCoreListener, LinphoneChatMessag
 						public void run() {
 						if (progress != null) progress.dismiss();
 						AlertDialog.Builder builder = new AlertDialog.Builder((Context) LinphoneManager.getInstance().getOpenH264DownloadHelper().getUserData(ctxt));
-						builder.setMessage("Sorry an error has occurred.");
+						builder.setMessage(getString(R.string.assistant_openh264_error));
 						builder.setCancelable(false);
-						builder.setNeutralButton("Ok", null);
+						builder.setNeutralButton(getString(R.string.ok), null);
 						builder.show();
 					}
 					});
@@ -306,6 +321,10 @@ public class LinphoneManager implements LinphoneCoreListener, LinphoneChatMessag
 
 		instance = new LinphoneManager(c);
 		instance.startLibLinphone(c);
+		instance.initOpenH264DownloadHelper();
+
+		// H264 codec Management - set to auto mode -> MediaCodec >= android 5.0 >= OpenH264
+		H264Helper.setH264Mode(H264Helper.MODE_AUTO, getLc());
 
 		TelephonyManager tm = (TelephonyManager) c.getSystemService(Context.TELEPHONY_SERVICE);
 		boolean gsmIdle = tm.getCallState() == TelephonyManager.CALL_STATE_IDLE;
@@ -652,7 +671,8 @@ public class LinphoneManager implements LinphoneCoreListener, LinphoneChatMessag
 
 	public synchronized final void destroyLinphoneCore() {
 		sExited = true;
-		BluetoothManager.getInstance().destroy();
+		ContactsManagerDestroy();
+		BluetoothManagerDestroy();
 		try {
 			mTimer.cancel();
 			mLc.destroy();
@@ -663,6 +683,7 @@ public class LinphoneManager implements LinphoneCoreListener, LinphoneChatMessag
 		finally {
 			try {
 				mServiceContext.unregisterReceiver(mKeepAliveReceiver);
+				mServiceContext.unregisterReceiver(mDozeReceiver);
 			} catch (Exception e) {
 				Log.e(e);
 			}
@@ -679,6 +700,7 @@ public class LinphoneManager implements LinphoneCoreListener, LinphoneChatMessag
 		 be sent by the system.
 		*/
 		mServiceContext.registerReceiver(mKeepAliveReceiver, mKeepAliveIntentFilter);
+		mServiceContext.registerReceiver(mDozeReceiver, mDozeIntentFilter);
 		sExited = false;
 	}
 
@@ -758,7 +780,6 @@ public class LinphoneManager implements LinphoneCoreListener, LinphoneChatMessag
 			mPrefs.echoConfigurationUpdated();
 		}
 
-		mLc.setContext(mServiceContext);
 		mLc.setZrtpSecretsCache(basePath + "/zrtp_secrets");
 
 		try {
@@ -786,9 +807,6 @@ public class LinphoneManager implements LinphoneCoreListener, LinphoneChatMessag
 		Log.w("MediaStreamer : " + availableCores + " cores detected and configured");
 		mLc.setCpuCount(availableCores);
 
-		int migrationResult = getLc().migrateToMultiTransport();
-		Log.d("Migration to multi transport result = " + migrationResult);
-
 		mLc.migrateCallLogs();
 
 		if (mServiceContext.getResources().getBoolean(R.bool.enable_push_id)) {
@@ -802,8 +820,16 @@ public class LinphoneManager implements LinphoneCoreListener, LinphoneChatMessag
 		*/
 		mKeepAliveIntentFilter = new IntentFilter(Intent.ACTION_SCREEN_ON);
 		mKeepAliveIntentFilter.addAction(Intent.ACTION_SCREEN_OFF);
+
 		mKeepAliveReceiver = new KeepAliveReceiver();
 		mServiceContext.registerReceiver(mKeepAliveReceiver, mKeepAliveIntentFilter);
+
+		mDozeIntentFilter = new IntentFilter(PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED);
+		mDozeIntentFilter.addAction(PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED);
+
+		mDozeReceiver = new DozeReceiver();
+
+		mServiceContext.registerReceiver(mDozeReceiver, mDozeIntentFilter);
 
 		updateNetworkReachability();
 
@@ -874,7 +900,7 @@ public class LinphoneManager implements LinphoneCoreListener, LinphoneChatMessag
 		ConnectivityManager cm = (ConnectivityManager) mServiceContext.getSystemService(Context.CONNECTIVITY_SERVICE);
 		NetworkInfo eventInfo = cm.getActiveNetworkInfo();
 
-		if (eventInfo == null || eventInfo.getState() == NetworkInfo.State.DISCONNECTED) {
+		if (eventInfo == null || eventInfo.getState() == NetworkInfo.State.DISCONNECTED || dozeModeEnabled) {
 			Log.i("No connectivity: setting network unreachable");
 			mLc.setNetworkReachable(false);
 		} else if (eventInfo.getState() == NetworkInfo.State.CONNECTED){
@@ -911,7 +937,8 @@ public class LinphoneManager implements LinphoneCoreListener, LinphoneChatMessag
 
 	@TargetApi(Build.VERSION_CODES.HONEYCOMB)
 	private void doDestroy() {
-		BluetoothManager.getInstance().destroy();
+		ContactsManagerDestroy();
+		BluetoothManagerDestroy();
 		try {
 			mTimer.cancel();
 			mLc.destroy();
@@ -921,14 +948,24 @@ public class LinphoneManager implements LinphoneCoreListener, LinphoneChatMessag
 		}
 		finally {
 			mServiceContext.unregisterReceiver(mKeepAliveReceiver);
+			mServiceContext.unregisterReceiver(mDozeReceiver);
 			mLc = null;
 			instance = null;
 		}
 	}
 
+	public static void ContactsManagerDestroy() {
+		if (ContactsManager.getInstance() != null)
+			ContactsManager.getInstance().destroy();
+	}
+
+	public static void BluetoothManagerDestroy() {
+		if (BluetoothManager.getInstance() != null)
+			BluetoothManager.getInstance().destroy();
+	}
+
 	public static synchronized void destroy() {
 		if (instance == null) return;
-		ContactsManager.getInstance().destroy();
 		getInstance().changeStatusToOffline();
 		sExited = true;
 		instance.doDestroy();
@@ -978,7 +1015,8 @@ public class LinphoneManager implements LinphoneCoreListener, LinphoneChatMessag
 
 		LinphoneAddress from = message.getFrom();
 
-		String textMessage = message.getText();
+		String textMessage = (message.getFileTransferInformation() != null) ?
+				getString(R.string.content_description_incoming_file) : message.getText();
 		try {
 			LinphoneContact contact = ContactsManager.getInstance().findContactFromAddress(from);
 			if (!mServiceContext.getResources().getBoolean(R.bool.disable_chat_message_notification)) {
@@ -1006,8 +1044,8 @@ public class LinphoneManager implements LinphoneCoreListener, LinphoneChatMessag
 		Log.i("New global state [",state,"]");
 		if (state == GlobalState.GlobalOn){
 			try {
+				Log.e("LinphoneManager"," globalState ON");
 				initLiblinphone(lc);
-				initOpenH264Helper();
 
 			} catch (LinphoneCoreException e) {
 				Log.e(e);
@@ -1073,6 +1111,7 @@ public class LinphoneManager implements LinphoneCoreListener, LinphoneChatMessag
 			return;
 		}
 		Log.d("[AudioManager] Mode: MODE_IN_COMMUNICATION");
+
 		mAudioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
 	}
 
@@ -1166,20 +1205,11 @@ public class LinphoneManager implements LinphoneCoreListener, LinphoneChatMessag
 		if (state == State.OutgoingInit) {
 			setAudioManagerInCallMode();
 			requestAudioFocus(STREAM_VOICE_CALL);
+			startBluetooth();
 		}
 
 		if (state == State.StreamsRunning) {
-			if (BluetoothManager.getInstance().isBluetoothHeadsetAvailable()) {
-				BluetoothManager.getInstance().routeAudioToBluetooth();
-				// Hack to ensure the bluetooth route is really used
-				mHandler.postDelayed(new Runnable() {
-					@Override
-					public void run() {
-						BluetoothManager.getInstance().routeAudioToBluetooth();
-					}
-				}, 500);
-			}
-
+			startBluetooth();
 			if (mIncallWakeLock == null) {
 				mIncallWakeLock = mPowerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,	"incall");
 			}
@@ -1189,6 +1219,19 @@ public class LinphoneManager implements LinphoneCoreListener, LinphoneChatMessag
 			} else {
 				Log.i("New call active while incall (CPU only) wake lock already active");
 			}
+		}
+	}
+
+	public void startBluetooth() {
+		if (BluetoothManager.getInstance().isBluetoothHeadsetAvailable()) {
+			BluetoothManager.getInstance().routeAudioToBluetooth();
+			// Hack to ensure the bluetooth route is really used
+			mHandler.postDelayed(new Runnable() {
+				@Override
+				public void run() {
+					BluetoothManager.getInstance().routeAudioToBluetooth();
+				}
+			}, 500);
 		}
 	}
 
@@ -1497,6 +1540,10 @@ public class LinphoneManager implements LinphoneCoreListener, LinphoneChatMessag
 			}
 		});
 		dialog.show();
+	}
+
+	public void setDozeModeEnabled(boolean b) {
+		dozeModeEnabled = b;
 	}
 
 	@SuppressWarnings("serial")

@@ -30,10 +30,9 @@ import org.linphone.core.LinphoneCallLog.CallStatus;
 
 import android.annotation.SuppressLint;
 import android.app.Dialog;
-import android.content.Context;
-import android.graphics.Bitmap;
-import android.os.Bundle;
 import android.app.Fragment;
+import android.content.Context;
+import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -222,7 +221,10 @@ public class HistoryListFragment extends Fragment implements OnClickListener, On
 
 	@Override
 	public void onContactsUpdated() {
-		historyList.setAdapter(new CallHistoryAdapter(getActivity().getApplicationContext()));
+		CallHistoryAdapter adapter = (CallHistoryAdapter)historyList.getAdapter();
+		if (adapter != null) {
+			adapter.notifyDataSetChanged();
+		}
 	}
 
 	@Override
@@ -473,18 +475,9 @@ public class HistoryListFragment extends Fragment implements OnClickListener, On
 			final String sipUri = address.asString();
 			if (c != null) {
 				displayName = c.getFullName();
-				if (c.hasPhoto()) {
-					Bitmap photo = c.getPhoto();
-					if (photo != null) {
-						holder.contactPicture.setImageBitmap(photo);
-					} else {
-						LinphoneUtils.setImagePictureFromUri(getActivity(), holder.contactPicture, c.getPhotoUri(), c.getThumbnailUri());
-					}
-				} else {
-					LinphoneUtils.setImagePictureFromUri(getActivity(), holder.contactPicture, c.getPhotoUri(), c.getThumbnailUri());
-				}
+				LinphoneUtils.setThumbnailPictureFromUri(getActivity(), holder.contactPicture, c.getThumbnailUri());
 			} else {
-				holder.contactPicture.setImageResource(R.drawable.avatar);
+				holder.contactPicture.setImageBitmap(ContactsManager.getInstance().getDefaultAvatarBitmap());
 			}
 
 			if (displayName == null) {

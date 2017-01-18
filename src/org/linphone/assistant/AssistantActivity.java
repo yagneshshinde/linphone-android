@@ -18,17 +18,17 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-import android.view.LayoutInflater;
-import android.view.ViewGroup;
-import android.widget.*;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
 import org.linphone.LinphoneActivity;
+import org.linphone.LinphoneLauncherActivity;
 import org.linphone.LinphoneManager;
 import org.linphone.LinphonePreferences;
-import org.linphone.LinphoneUtils;
 import org.linphone.LinphonePreferences.AccountBuilder;
+import org.linphone.LinphoneService;
+import org.linphone.LinphoneUtils;
 import org.linphone.R;
 import org.linphone.StatusFragment;
 import org.linphone.core.DialPlan;
@@ -47,10 +47,12 @@ import org.linphone.tools.OpenH264DownloadHelper;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlarmManager;
 import android.app.AlertDialog;
 import android.app.Dialog;
 import android.app.Fragment;
 import android.app.FragmentTransaction;
+import android.app.PendingIntent;
 import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -63,14 +65,18 @@ import android.os.Bundle;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.text.TextUtils;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnClickListener;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import android.widget.BaseAdapter;
+import android.widget.Filter;
+import android.widget.Filterable;
+import android.widget.ImageView;
+import android.widget.TextView;
+import android.widget.Toast;
 
 /**
  * @author Sylvain Berfini
@@ -393,6 +399,10 @@ private static AssistantActivity instance;
 
 	public void displayLoginLinphone() {
 		fragment = new LinphoneLoginFragment();
+		Bundle extras = new Bundle();
+		extras.putString("Phone", null);
+		extras.putString("Dialcode", null);
+		fragment.setArguments(extras);
 		changeFragment(fragment);
 		currentFragment = AssistantFragmentsEnum.LINPHONE_LOGIN;
 		back.setVisibility(View.VISIBLE);
@@ -430,7 +440,7 @@ private static AssistantActivity instance;
 	}
 
 	private void launchDownloadCodec() {
-		if (LinphoneManager.getLc().openH264Enabled()) {
+		if (LinphoneManager.getLc().downloadOpenH264Enabled()) {
 			OpenH264DownloadHelper downloadHelper = LinphoneCoreFactory.instance().createOpenH264DownloadHelper();
 			if (Version.getCpuAbis().contains("armeabi-v7a") && !Version.getCpuAbis().contains("x86") && !downloadHelper.isCodecFound()) {
 				CodecDownloaderFragment codecFragment = new CodecDownloaderFragment();
@@ -594,6 +604,19 @@ private static AssistantActivity instance;
 		back.setVisibility(View.INVISIBLE);
 	}
 
+	public void displayAssistantLinphoneLogin( String phone, String dialcode) {
+		LinphoneLoginFragment fragment = new LinphoneLoginFragment();
+		newAccount = true;
+		Bundle extras = new Bundle();
+		extras.putString("Phone", phone);
+		extras.putString("Dialcode", dialcode);
+		fragment.setArguments(extras);
+		changeFragment(fragment);
+
+		currentFragment = AssistantFragmentsEnum.LINPHONE_LOGIN;
+		back.setVisibility(View.VISIBLE);
+	}
+
 	public void isAccountVerified(String username) {
 		Toast.makeText(this, getString(R.string.assistant_account_validated), Toast.LENGTH_LONG).show();
 		hideKeyboard();
@@ -650,6 +673,18 @@ private static AssistantActivity instance;
 		if (status != null) {
 			status.setLinphoneCoreListener();
 		}
+	}
+
+	public void restartApplication() {
+		mPrefs.firstLaunchSuccessful();
+
+		Intent mStartActivity = new Intent(this, LinphoneLauncherActivity.class);
+		PendingIntent mPendingIntent = PendingIntent.getActivity(this, (int) System.currentTimeMillis(), mStartActivity, PendingIntent.FLAG_CANCEL_CURRENT);
+		AlarmManager mgr = (AlarmManager)this.getSystemService(Context.ALARM_SERVICE);
+		mgr.set(AlarmManager.RTC, System.currentTimeMillis() + 500, mPendingIntent);
+
+		stopService(new Intent(Intent.ACTION_MAIN).setClass(this, LinphoneService.class));
+		android.os.Process.killProcess(android.os.Process.myPid());
 	}
 
 	@Override

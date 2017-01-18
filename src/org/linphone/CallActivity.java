@@ -79,7 +79,7 @@ import android.widget.Toast;
 /**
  * @author Sylvain Berfini
  */
-public class CallActivity extends Activity implements OnClickListener, SensorEventListener, ActivityCompat.OnRequestPermissionsResultCallback {
+public class CallActivity extends LinphoneGenericActivity implements OnClickListener, SensorEventListener, ActivityCompat.OnRequestPermissionsResultCallback {
 	private final static int SECONDS_BEFORE_HIDING_CONTROLS = 4000;
 	private final static int SECONDS_BEFORE_DENYING_CALL_UPDATE = 30000;
 	private static final int PERMISSIONS_REQUEST_CAMERA = 202;
@@ -133,7 +133,7 @@ public class CallActivity extends Activity implements OnClickListener, SensorEve
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		instance = this;
-		
+
 		if (getResources().getBoolean(R.bool.orientation_portrait_only)) {
 			setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 		}
@@ -166,7 +166,7 @@ public class CallActivity extends Activity implements OnClickListener, SensorEve
 			public void messageReceived(LinphoneCore lc, LinphoneChatRoom cr, LinphoneChatMessage message) {
 		        displayMissedChats();
 			}
-			
+
 			@Override
 			public void callState(LinphoneCore lc, final LinphoneCall call, LinphoneCall.State state, String message) {
 				if (LinphoneManager.getLc().getCallsNb() == 0) {
@@ -436,7 +436,7 @@ public class CallActivity extends Activity implements OnClickListener, SensorEve
 	public void checkAndRequestPermission(String permission, int result) {
 		int permissionGranted = getPackageManager().checkPermission(permission, getPackageName());
 		Log.i("[Permission] " + permission + " is " + (permissionGranted == PackageManager.PERMISSION_GRANTED ? "granted" : "denied"));
-		
+
 		if (permissionGranted != PackageManager.PERMISSION_GRANTED) {
 			if (LinphonePreferences.instance().firstTimeAskingForPermission(permission) || ActivityCompat.shouldShowRequestPermissionRationale(this, permission)) {
 				Log.i("[Permission] Asking for " + permission);
@@ -450,7 +450,7 @@ public class CallActivity extends Activity implements OnClickListener, SensorEve
 		for (int i = 0; i < permissions.length; i++) {
 			Log.i("[Permission] " + permissions[i] + " is " + (grantResults[i] == PackageManager.PERMISSION_GRANTED ? "granted" : "denied"));
 		}
-		
+
 		switch (requestCode) {
 			case PERMISSIONS_REQUEST_CAMERA:
 				UIThreadDispatcher.dispatch(new Runnable() {
@@ -618,7 +618,7 @@ public class CallActivity extends Activity implements OnClickListener, SensorEve
 		if (id == R.id.video) {
 			int camera = getPackageManager().checkPermission(Manifest.permission.CAMERA, getPackageName());
 			Log.i("[Permission] Camera permission is " + (camera == PackageManager.PERMISSION_GRANTED ? "granted" : "denied"));
-			
+
 			if (camera == PackageManager.PERMISSION_GRANTED) {
 				disableVideo(isVideoEnabled(LinphoneManager.getLc().getCurrentCall()));
 			} else {
@@ -629,7 +629,7 @@ public class CallActivity extends Activity implements OnClickListener, SensorEve
 		else if (id == R.id.micro) {
 			int recordAudio = getPackageManager().checkPermission(Manifest.permission.RECORD_AUDIO, getPackageName());
 			Log.i("[Permission] Record audio permission is " + (recordAudio == PackageManager.PERMISSION_GRANTED ? "granted" : "denied"));
-			
+
 			if (recordAudio == PackageManager.PERMISSION_GRANTED) {
 				toggleMicro();
 			} else {
@@ -783,7 +783,7 @@ public class CallActivity extends Activity implements OnClickListener, SensorEve
 
 		//Check if the call is not terminated
 		if(call.getState() == State.CallEnd || call.getState() == State.CallReleased) return;
-		
+
 		if (!displayVideo) {
 			showAudioView();
 		} else {
@@ -803,10 +803,14 @@ public class CallActivity extends Activity implements OnClickListener, SensorEve
 				mSensorManager.registerListener(this, mProximity, SensorManager.SENSOR_DELAY_NORMAL);
 				mProximitySensingEnabled = true;
 			}
-		}else{
+		} else {
 			if (mProximitySensingEnabled){
 				mSensorManager.unregisterListener(this);
 				mProximitySensingEnabled = false;
+				// Don't forgeting to release wakelock if held
+				if(wakeLock.isHeld()) {
+					wakeLock.release();
+				}
 			}
 		}
 	}
@@ -828,6 +832,7 @@ public class CallActivity extends Activity implements OnClickListener, SensorEve
 		refreshInCallActions();
 
 		enableProximitySensing(false);
+
 		replaceFragmentAudioByVideo();
 		hideStatusBar();
 	}
@@ -1143,7 +1148,7 @@ public class CallActivity extends Activity implements OnClickListener, SensorEve
 			public void onClick(View view) {
 				int camera = getPackageManager().checkPermission(Manifest.permission.CAMERA, getPackageName());
 				Log.i("[Permission] Camera permission is " + (camera == PackageManager.PERMISSION_GRANTED ? "granted" : "denied"));
-				
+
 				if (camera == PackageManager.PERMISSION_GRANTED) {
 					CallActivity.instance().acceptCallUpdate(true);
 				} else {
@@ -1230,7 +1235,9 @@ public class CallActivity extends Activity implements OnClickListener, SensorEve
 			mControlsHandler.removeCallbacks(mControls);
 		}
 		mControls = null;
-		enableProximitySensing(false);
+		// Workaround for proximity sensor bug on Samsung devices
+		if (lc.getCurrentCall() != null && lc.getCurrentCall().getState() != State.StreamsRunning)
+			enableProximitySensing(false);
 	}
 
 	@Override
@@ -1322,7 +1329,7 @@ public class CallActivity extends Activity implements OnClickListener, SensorEve
 		LinphoneContact lContact  = ContactsManager.getInstance().findContactFromAddress(lAddress);
 		if (lContact == null) {
 			contactName.setText(LinphoneUtils.getAddressDisplayName(lAddress));
-			contactPicture.setImageResource(R.drawable.avatar);
+			contactPicture.setImageBitmap(ContactsManager.getInstance().getDefaultAvatarBitmap());
 		} else {
 			contactName.setText(lContact.getFullName());
 			LinphoneUtils.setImagePictureFromUri(contactPicture.getContext(), contactPicture, lContact.getPhotoUri(), lContact.getThumbnailUri());
@@ -1541,7 +1548,7 @@ public class CallActivity extends Activity implements OnClickListener, SensorEve
 
 		final float distanceInCm = event.values[0];
 		final float maxDistance = event.sensor.getMaximumRange();
-		Log.d("Proximity sensor report [",distanceInCm,"] , for max range [",maxDistance,"]");
+		Log.d("Proximity sensor report ["+distanceInCm+"] , for max range ["+maxDistance+"]");
 
 		if (maxDistance <= threshold) {
 			// Case binary 0/1 and short sensors
@@ -1568,14 +1575,14 @@ public class CallActivity extends Activity implements OnClickListener, SensorEve
 	public void onAccuracyChanged(Sensor sensor, int accuracy) {
 
 	}
-	
+
 	private void displayMissedChats() {
 		int count = 0;
 		LinphoneChatRoom[] chats = LinphoneManager.getLc().getChatRooms();
 		for (LinphoneChatRoom chatroom : chats) {
 			count += chatroom.getUnreadMessagesCount();
 		}
-		
+
 		if (count > 0) {
 			missedChats.setText(count + "");
 			missedChats.setVisibility(View.VISIBLE);
